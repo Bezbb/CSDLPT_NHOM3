@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>CSDLPTNHOM3</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="./style.css" rel="stylesheet" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Quản lý học viện</h1>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <div class="tabs">
+        <select id="entitySelect"></select>
+        <input id="searchInput" class="input" placeholder="Tìm nhanh..." />
+        <button id="reloadBtn" class="btn">Tải lại</button>
+      </div>
+
+      <form id="crudForm" class="grid"></form>
+
+      <div class="actions">
+        <button id="submitBtn" class="btn primary">Thêm mới</button>
+        <button id="cancelBtn" type="button" class="btn">Hủy</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Danh sách</h3>
+      <div class="table-wrap">
+        <table id="dataTable"></table>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
