@@ -1,6 +1,6 @@
 const API_BASE = "http://localhost:3000/api";
 
-// ======= Định nghĩa entity & field (để FE render form) =======
+/* =============== KHAI BÁO ENTITY =============== */
 const ENTITIES = {
   headquarter: {
     title: "Trụ sở",
@@ -83,39 +83,46 @@ const ENTITIES = {
   }
 };
 
-// ======= Tiện ích nho nhỏ =======
+/* =============== HELPER =============== */
 const $ = (s) => document.querySelector(s);
 const toast = (msg, ok = true) => {
   const t = $("#toast");
+  if (!t) return alert(msg);
   t.textContent = msg;
   t.classList.remove("hidden");
   t.style.color = ok ? "green" : "crimson";
-  setTimeout(() => t.classList.add("hidden"), 2500);
+  setTimeout(() => t.classList.add("hidden"), 2200);
 };
 
 let currentEntity = "headquarter";
 let editingId = null;
-let cacheOptions = {}; // cache dropdown
+let cacheOptions = {}; // cache dropdowns
 
-// Build options cho <select> từ entity khác
+/* =============== LOAD OPTIONS FOR SELECT =============== */
 async function loadOptionsForField(field) {
   if (!field.optionsFrom) return [];
   const [entity, valueKey, labelKey] = field.optionsFrom.split(":");
   if (!cacheOptions[entity]) {
     const res = await fetch(`${API_BASE}/${entity}`);
+    if (!res.ok) throw new Error(await res.text());
     cacheOptions[entity] = await res.json();
   }
-  return cacheOptions[entity].map(x => ({ value: x[valueKey], label: x[labelKey] ?? x[valueKey] }));
+  return cacheOptions[entity].map(x => ({
+    value: x[valueKey],
+    label: x[labelKey] ?? x[valueKey]
+  }));
 }
 
-// Render form theo entity
+/* =============== RENDER FORM =============== */
 async function renderForm() {
   const cfg = ENTITIES[currentEntity];
   const form = $("#crudForm");
   form.innerHTML = "";
+
   for (const f of cfg.fields) {
     const wrap = document.createElement("label");
     wrap.className = "field";
+
     const title = document.createElement("span");
     title.textContent = f.label;
     wrap.appendChild(title);
@@ -124,13 +131,17 @@ async function renderForm() {
     if (f.type === "select") {
       input = document.createElement("select");
       input.name = f.key;
-      const opts = await loadOptionsForField(f);
+
       const opt0 = document.createElement("option");
-      opt0.value = ""; opt0.textContent = "-- chọn --";
+      opt0.value = "";
+      opt0.textContent = "-- chọn --";
       input.appendChild(opt0);
+
+      const opts = await loadOptionsForField(f);
       for (const o of opts) {
         const opt = document.createElement("option");
-        opt.value = o.value; opt.textContent = o.label;
+        opt.value = o.value;
+        opt.textContent = o.label;
         input.appendChild(opt);
       }
     } else {
@@ -138,94 +149,132 @@ async function renderForm() {
       input.type = f.type || "text";
       input.name = f.key;
     }
+
     if (editingId == null && f.key === cfg.idKey) input.required = true;
+
     wrap.appendChild(input);
     form.appendChild(wrap);
   }
 }
 
-// Tải danh sách và render bảng
+/* =============== RENDER TABLE =============== */
 async function loadTable() {
   const cfg = ENTITIES[currentEntity];
   const table = $("#dataTable");
   table.innerHTML = "";
-  const res = await fetch(`${API_BASE}/${currentEntity}`);
-  const rows = await res.json();
+  try {
+    const res = await fetch(`${API_BASE}/${currentEntity}`);
+    if (!res.ok) throw new Error(await res.text());
+    const rows = await res.json();
 
-  const thead = document.createElement("thead");
-  const trh = document.createElement("tr");
-  for (const f of cfg.fields) {
-    const th = document.createElement("th");
-    th.textContent = f.label;
-    trh.appendChild(th);
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    for (const f of cfg.fields) {
+      const th = document.createElement("th");
+      th.textContent = f.label;
+      trh.appendChild(th);
+    }
+    const thAct = document.createElement("th");
+    thAct.textContent = "";
+    trh.appendChild(thAct);
+    thead.appendChild(trh);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    const keyword = ($("#searchInput")?.value || "").toLowerCase().trim();
+
+    rows
+      .filter(r => !keyword || Object.values(r).some(v => String(v ?? "").toLowerCase().includes(keyword)))
+      .forEach(r => {
+        const tr = document.createElement("tr");
+        for (const f of cfg.fields) {
+          const td = document.createElement("td");
+          td.textContent = r[f.key] ?? "";
+          tr.appendChild(td);
+        }
+        const tdA = document.createElement("td");
+        const btnEdit = document.createElement("button");
+        btnEdit.className = "btn";
+        btnEdit.textContent = "Sửa";
+        btnEdit.onclick = () => startEdit(r);
+
+        const btnDel = document.createElement("button");
+        btnDel.className = "btn danger";
+        btnDel.textContent = "Xóa";
+        btnDel.onclick = () => doDelete(r[cfg.idKey]);
+
+        tdA.append(btnEdit, " ", btnDel);
+        tr.appendChild(tdA);
+        tbody.appendChild(tr);
+      });
+
+    table.appendChild(tbody);
+  } catch (e) {
+    console.error(e);
+    toast(`Lỗi tải danh sách: ${e.message}`, false);
   }
-  const thAct = document.createElement("th"); thAct.textContent = "";
-  trh.appendChild(thAct);
-  thead.appendChild(trh);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  const keyword = $("#searchInput").value.toLowerCase().trim();
-
-  rows
-    .filter(r => !keyword || Object.values(r).some(v => String(v ?? "").toLowerCase().includes(keyword)))
-    .forEach(r => {
-      const tr = document.createElement("tr");
-      for (const f of cfg.fields) {
-        const td = document.createElement("td");
-        td.textContent = r[f.key] ?? "";
-        tr.appendChild(td);
-      }
-      const tdA = document.createElement("td");
-      const bEdit = document.createElement("button");
-      bEdit.className = "btn"; bEdit.textContent = "Sửa";
-      bEdit.onclick = () => startEdit(r);
-      const bDel = document.createElement("button");
-      bDel.className = "btn danger"; bDel.textContent = "Xóa";
-      bDel.onclick = () => doDelete(r[cfg.idKey]);
-      tdA.append(bEdit, " ", bDel);
-      tr.appendChild(tdA);
-      tbody.appendChild(tr);
-    });
-  table.appendChild(tbody);
 }
 
-function formDataToObj() {
+/* =============== FORM DATA & TYPE CAST =============== */
+function collectFormData() {
+  const form = $("#crudForm");
+  const cfg = ENTITIES[currentEntity];
   const obj = {};
-  for (const el of $("#crudForm").elements) {
+
+  for (const el of form.elements) {
     if (!el.name) continue;
-    obj[el.name] = el.value || null;
+    obj[el.name] = el.value === "" ? null : el.value;
+  }
+
+  // ép kiểu number & date
+  for (const f of cfg.fields) {
+    if (f.type === "number") {
+      obj[f.key] = obj[f.key] == null ? null : Number(obj[f.key]);
+    }
+    if (f.type === "date") {
+      obj[f.key] = obj[f.key] || null;
+    }
   }
   return obj;
 }
 
-async function doSubmit(e) {
-  e.preventDefault();
+/* =============== CREATE / UPDATE / DELETE =============== */
+async function doSave() {
   const cfg = ENTITIES[currentEntity];
-  const data = formDataToObj();
+  const data = collectFormData();
+
+  const url = editingId
+    ? `${API_BASE}/${currentEntity}/${encodeURIComponent(editingId)}`
+    : `${API_BASE}/${currentEntity}`;
+  const method = editingId ? "PUT" : "POST";
+
+  // với POST yêu cầu ID bắt buộc
+  if (!editingId && !data[cfg.idKey]) {
+    toast(`Thiếu ${cfg.idKey}`, false);
+    return;
+  }
+
   try {
-    if (editingId) {
-      await fetch(`${API_BASE}/${currentEntity}/${encodeURIComponent(editingId)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-      });
-      toast("Đã cập nhật");
-    } else {
-      if (!data[cfg.idKey]) return toast(`Thiếu ${cfg.idKey}`, false);
-      await fetch(`${API_BASE}/${currentEntity}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-      });
-      toast("Đã thêm mới");
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      try { throw new Error(JSON.parse(txt).error || txt); }
+      catch { throw new Error(txt || `HTTP ${res.status}`); }
     }
+
+    toast(editingId ? "Đã cập nhật" : "Đã thêm mới");
     editingId = null;
     $("#submitBtn").textContent = "Thêm mới";
     $("#crudForm").reset();
     await loadTable();
-  } catch (err) {
-    toast(err.message || "Lỗi", false);
+  } catch (e) {
+    console.error(e);
+    toast(e.message || "Lỗi lưu dữ liệu", false);
   }
 }
 
@@ -233,7 +282,9 @@ function startEdit(row) {
   const cfg = ENTITIES[currentEntity];
   editingId = row[cfg.idKey];
   $("#submitBtn").textContent = "Lưu thay đổi";
-  for (const el of $("#crudForm").elements) {
+
+  const form = $("#crudForm");
+  for (const el of form.elements) {
     if (!el.name) continue;
     el.value = row[el.name] ?? "";
   }
@@ -242,19 +293,30 @@ function startEdit(row) {
 
 async function doDelete(id) {
   if (!confirm("Xóa bản ghi này?")) return;
-  await fetch(`${API_BASE}/${currentEntity}/${encodeURIComponent(id)}`, { method: "DELETE" });
-  toast("Đã xóa");
-  await loadTable();
+  try {
+    const res = await fetch(`${API_BASE}/${currentEntity}/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!res.ok) {
+      const txt = await res.text();
+      try { throw new Error(JSON.parse(txt).error || txt); }
+      catch { throw new Error(txt || `HTTP ${res.status}`); }
+    }
+    toast("Đã xóa");
+    await loadTable();
+  } catch (e) {
+    console.error(e);
+    toast(e.message || "Lỗi xóa", false);
+  }
 }
 
-// ======= Khởi tạo =======
+/* =============== INIT =============== */
 async function init() {
-  // fill select entity
+  // dropdown entity
   const sel = $("#entitySelect");
   sel.innerHTML = "";
   for (const key of Object.keys(ENTITIES)) {
     const opt = document.createElement("option");
-    opt.value = key; opt.textContent = ENTITIES[key].title + ` (${key})`;
+    opt.value = key;
+    opt.textContent = `${ENTITIES[key].title} (${key})`;
     sel.appendChild(opt);
   }
   sel.value = currentEntity;
@@ -262,22 +324,25 @@ async function init() {
     currentEntity = sel.value;
     editingId = null;
     $("#submitBtn").textContent = "Thêm mới";
-    cacheOptions = {}; // refresh options
+    cacheOptions = {};
     await renderForm();
     await loadTable();
   };
 
-  $("#searchInput").oninput = () => loadTable();
-  $("#reloadBtn").onclick = () => loadTable();
-  $("#crudForm").addEventListener("submit", doSubmit);
-  $("#cancelBtn").onclick = () => {
+  // các nút thao tác — giống “Xóa”, dùng onclick
+  $("#submitBtn").onclick = (e) => { e.preventDefault(); doSave(); };
+  $("#cancelBtn").onclick  = (e) => {
+    e.preventDefault();
     editingId = null;
     $("#submitBtn").textContent = "Thêm mới";
     $("#crudForm").reset();
   };
 
+  $("#searchInput").oninput = () => loadTable();
+  $("#reloadBtn").onclick = () => loadTable();
+
   await renderForm();
   await loadTable();
 }
 
-init();
+document.addEventListener("DOMContentLoaded", init);
